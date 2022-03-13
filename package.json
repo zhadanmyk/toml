@@ -1,0 +1,22 @@
+{
+  "name": "toml",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "clean": "git clean -xfd",
+    "build": "tsc",
+    "pretoml-test": "node scripts/get-toml-test.js",
+    "toml-test": "toml-test/toml-test node dist/decoder-cli.js"
+  },
+  "author": "",
+  "type": "module",
+  "license": "ISC",
+  "devDependencies": {
+    "@tsconfig/node16-strictest-esm": "^1.0.0",
+    "@types/node": "^17.0.21",
+    "get-stdin": "^9.0.0",
+    "shelljs": "^0.8.5",
+    "typescript": "^4.6.2"
+  }
+}
