@@ -3,27 +3,32 @@ import { Span } from "../Span";
 import * as tokens from "./Tokens";
 import * as errors from "./TokenErrors";
 
-export type Char = string;
+type Char = string;
 
 export class Cursor {
   constructor(private readonly file: File, public position: number) {}
   clone() {
     return new Cursor(this.file, this.position);
   }
-  peek(): Char {
-    return this.file.content.charAt(this.position);
+  peek(): Char | undefined {
+    return this.file.chars[this.position];
+  }
+  peekCode(): number | undefined {
+    return this.file.chars[this.position]?.codePointAt(0);
   }
   forward(): void {
     this.position++;
+  }
+  done(): boolean {
+    return this.position >= this.file.chars.length;
   }
   span(start?: Cursor): Span {
     return new Span(this.file, (start ?? this).position, this.position);
   }
   text(start?: Cursor): string {
-    return this.file.content.substring(
-      (start ?? this).position,
-      this.position + 1
-    );
+    return this.file.chars
+      .slice((start ?? this).position, this.position + 1)
+      .join("");
   }
 }
 
@@ -35,54 +40,57 @@ export class Tokenizer {
   }
 
   next(): tokens.Token | errors.TokenizerError {
-    if (this.atEnd()) {
+    if (this.cursor.done()) {
       return new tokens.EndOfFile(this.cursor.span());
     }
-    const start = this.cursor.clone();
-    const char = this.cursor.peek();
-    this.cursor.forward();
-    switch (char) {
-      case "\n":
-        return new tokens.Newline(start.span());
-      case " ":
-      case "\t":
-        return this.consumeWhitespace(start);
-      case "#":
-        return this.consumeComment(start);
-      case "=":
-        return new tokens.Equals(start.span());
-      case ".":
-        return new tokens.Period(start.span());
-      case ",":
-        return new tokens.Comma(start.span());
-      case ":":
-        return new tokens.Colon(start.span());
-      case "+":
-        return new tokens.Plus(start.span());
-      case "{":
-        return new tokens.LeftBrace(start.span());
-      case "}":
-        return new tokens.RightBrace(start.span());
-      case "[":
-        return new tokens.LeftBracket(start.span());
-      case "]":
-        return new tokens.RightBracket(start.span());
-      case "'":
-        return this.consumeLiteralString(start);
-      case '"':
-        return this.consumeBasicString(start);
-      default:
-        if (isKeyLike(char)) {
-          return this.consumeKeyLike(start);
-        } else {
-          return new errors.Unexpected(start.span(), char);
-        }
+    try {
+      const char = this.cursor.peek()!;
+      switch (char) {
+        case "\n":
+          return new tokens.Newline(this.cursor.span());
+        case " ":
+        case "\t":
+          return this.consumeWhitespace();
+        case "#":
+          return this.consumeComment();
+        case "=":
+          return new tokens.Equals(this.cursor.span());
+        case ".":
+          return new tokens.Period(this.cursor.span());
+        case ",":
+          return new tokens.Comma(this.cursor.span());
+        case ":":
+          return new tokens.Colon(this.cursor.span());
+        case "+":
+          return new tokens.Plus(this.cursor.span());
+        case "{":
+          return new tokens.LeftBrace(this.cursor.span());
+        case "}":
+          return new tokens.RightBrace(this.cursor.span());
+        case "[":
+          return new tokens.LeftBracket(this.cursor.span());
+        case "]":
+          return new tokens.RightBracket(this.cursor.span());
+        case "'":
+          return this.consumeLiteralString();
+        case '"':
+          return this.consumeBasicString();
+        default:
+          if (isKeyLike(char)) {
+            return this.consumeKeyLike();
+          } else {
+            return new errors.Unexpected(this.cursor.span(), char);
+          }
+      }
+    } finally {
+      this.cursor.forward();
     }
   }
 
-  private consumeWhitespace(start: Cursor): tokens.Whitespace {
-    while ((!this.atEnd() && this.tryChar(" ")) || this.tryChar("\t")) {
-      // ...
+  private consumeWhitespace(): tokens.Whitespace {
+    const start = this.cursor.clone();
+    while (this.cursor.peek() === " " || this.cursor.peek() === "\t") {
+      this.cursor.forward();
     }
     return new tokens.Whitespace(
       this.cursor.span(start),
@@ -90,10 +98,11 @@ export class Tokenizer {
     );
   }
 
-  private consumeComment(start: Cursor): tokens.Comment {
-    while (!this.atEnd()) {
-      const ch = this.cursor.peek();
-      if (ch != "\t" && (ch < "\u{20}" || ch > "\u{10ffff}")) {
+  private consumeComment(): tokens.Comment {
+    const start = this.cursor.clone();
+    let char: Char | undefined;
+    while (undefined !== (char = this.cursor.peek())) {
+      if (isControlChar(char)) {
         break;
       }
       this.cursor.forward();
@@ -101,17 +110,25 @@ export class Tokenizer {
     return new tokens.Comment(this.cursor.span(start), this.cursor.text(start));
   }
 
-  private consumeLiteralString(start: Cursor): tokens.String {
+  private consumeLiteralString(): tokens.String {
+    const start = this.cursor.clone();
+    return this.consumeString("'", start, (ch) => {
+      if (isControlChar(ch)) {
+        throw new errors.InvalidCharInString(this.cursor.span(start), ch);
+      }
+      return ch;
+    });
+  }
+
+  private consumeBasicString(): tokens.String {
+    const start = this.cursor.clone();
     return new tokens.String(start.span(), " ", " ", false);
   }
 
-  private consumeBasicString(start: Cursor): tokens.String {
-    return new tokens.String(start.span(), " ", " ", false);
-  }
-
-  private consumeKeyLike(start: Cursor): tokens.KeyLike {
-    while (!this.atEnd()) {
-      const ch = this.cursor.peek();
+  private consumeKeyLike(): tokens.KeyLike {
+    const start = this.cursor.clone();
+    while (!this.cursor.done()) {
+      const ch = this.cursor.peek()!;
       if (!isKeyLike(ch)) {
         break;
       }
@@ -120,8 +137,89 @@ export class Tokenizer {
     return new tokens.KeyLike(this.cursor.span(start), this.cursor.text(start));
   }
 
-  private atEnd() {
-    return this.cursor.peek() !== undefined;
+  private consumeString(
+    delimiter: Char,
+    start: Cursor,
+    readChar: ReadCharFn
+  ): tokens.String {
+    let multiline = false;
+    let value = "";
+    // Skip the starting delimiter.
+    this.cursor.forward();
+    if (this.tryChar(delimiter)) {
+      if (this.tryChar(delimiter)) {
+        multiline = true;
+      } else {
+        // Empty string
+        return new tokens.String(
+          this.cursor.span(start),
+          this.cursor.text(start),
+          value,
+          multiline
+        );
+      }
+    }
+
+    while (!this.cursor.done()) {
+      const char = this.cursor.peek()!;
+      switch (char) {
+        case "\r":
+          if (!multiline) {
+            throw new errors.NewlineInString(this.cursor.span(start));
+          }
+          // Skip the "\r" of "\r\n".
+          this.cursor.forward();
+          if (this.cursor.peek() !== "\n") {
+            // But error if is a freestanding "\r".
+            throw new errors.InvalidCharInString(this.cursor.span(start), "\r");
+          }
+          break;
+        case "\n":
+          if (!multiline) {
+            throw new errors.NewlineInString(this.cursor.span(start));
+          }
+          if (value !== "") {
+            // We only add the newline if it is not at the start of the multiline string.
+            value += char;
+          }
+          this.cursor.forward();
+          break;
+        case delimiter:
+          if (!multiline) {
+            // We found the end of a non-multiline string.
+            return new tokens.String(
+              this.cursor.span(start),
+              this.cursor.text(start),
+              value,
+              multiline
+            );
+          }
+          this.cursor.forward();
+          if (this.tryChar(delimiter)) {
+            if (this.tryChar(delimiter)) {
+              // We found the end of a multiline string.
+              return new tokens.String(
+                this.cursor.span(start),
+                this.cursor.text(start),
+                value,
+                multiline
+              );
+            } else {
+              // Just two quotes in a row so add them to the value.
+              value += delimiter + delimiter;
+            }
+          } else {
+            // Just a single quote so add it to the value.
+            value += delimiter;
+          }
+          break;
+        default:
+          value += readChar(char, multiline);
+          this.cursor.forward();
+          break;
+      }
+    }
+    throw new errors.UnterminatedString(this.cursor.span(start));
   }
 
   private tryChar(char: Char): boolean {
@@ -137,3 +235,9 @@ export class Tokenizer {
 function isKeyLike(ch: Char): boolean {
   return /[A-Za-z0-9_-]/.test(ch);
 }
+
+function isControlChar(ch: Char): boolean {
+  return /[\x00-\x08\x0A-\x1F\x7F]/.test(ch);
+}
+
+type ReadCharFn = (initialChar: Char, multiline: boolean) => Char;
