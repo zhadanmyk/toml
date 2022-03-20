@@ -16,4 +16,18 @@ export class Span {
       Math.max(this.end, other.end)
     );
   }
+
+  toString(): string {
+    const start = Math.max(this.start - 3, 0);
+    const end = Math.min(this.end + 3, this.file.chars.length - 1);
+    const prefix = start > 0 ? "..." : "";
+    const postfix = end < this.file.chars.length - 1 ? "..." : "";
+    const text = this.file.chars.slice(start, end).join("");
+    const file = this.file.filePath
+      ? `${this.file.filePath}`
+      : "<unnamed file>";
+    return (
+      `${file} [${this.start},${this.end}]:` + `${prefix + text + postfix}`
+    );
+  }
 }

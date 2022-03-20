@@ -1,67 +1,79 @@
 import type { Span } from "../Span";
 
 export abstract class TokenizerError extends Error {
-  constructor(readonly span: Span) {
-    super();
+  constructor(readonly type: string, readonly span: Span, message = "") {
+    super(`${type} (${span.toString()})${message ? ": " + message : ""}`);
   }
 }
 
 export class InvalidCharInString extends TokenizerError {
   constructor(span: Span, readonly char: string) {
-    super(span);
+    super(
+      "InvalidCharInString",
+      span,
+      `Unexpected character: ${JSON.stringify(char)}`
+    );
   }
 }
 
 export class InvalidEscape extends TokenizerError {
   constructor(span: Span, readonly char: string) {
-    super(span);
+    super(
+      "InvalidEscape",
+      span,
+      `Unexpected character: ${JSON.stringify(char)}`
+    );
   }
 }
 
 export class InvalidHexEscape extends TokenizerError {
   constructor(span: Span, readonly char: string) {
-    super(span);
+    super(
+      "InvalidHexEscape",
+      span,
+      `Unexpected character: ${JSON.stringify(char)}`
+    );
   }
 }
 
 export class InvalidEscapeValue extends TokenizerError {
   constructor(span: Span, readonly value: number) {
-    super(span);
+    super("InvalidEscapeValue", span, `Invalid value: 0x${value.toString(16)}`);
   }
 }
 
 export class NewlineInString extends TokenizerError {
   constructor(span: Span) {
-    super(span);
+    super("NewlineInString", span);
   }
 }
 
 export class Unexpected extends TokenizerError {
   constructor(span: Span, readonly char: string) {
-    super(span);
+    super("Unexpected", span, `Unexpected character: ${JSON.stringify(char)}`);
   }
 }
 
 export class UnterminatedString extends TokenizerError {
   constructor(span: Span) {
-    super(span);
+    super("UnterminatedString", span);
   }
 }
 
 export class NewlineInTableKey extends TokenizerError {
   constructor(span: Span) {
-    super(span);
+    super("NewlineInTableKey", span);
   }
 }
 
 export class MultilineStringKey extends TokenizerError {
   constructor(span: Span) {
-    super(span);
+    super("MultilineStringKey", span);
   }
 }
 
 export class Wanted extends TokenizerError {
   constructor(span: Span, readonly expected: string, readonly found: string) {
-    super(span);
+    super("Wanted", span);
   }
 }

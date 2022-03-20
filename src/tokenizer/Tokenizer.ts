@@ -10,14 +10,17 @@ export class Cursor {
   clone() {
     return new Cursor(this.file, this.position);
   }
-  peek(): Char | undefined {
-    return this.file.chars[this.position];
+  peek(offset: number = 0): Char | undefined {
+    return this.file.chars[this.position + offset];
   }
   peekCode(): number | undefined {
     return this.file.chars[this.position]?.codePointAt(0);
   }
   forward(): void {
     this.position++;
+    if (this.peek() === "\r" && this.peek(1) === "\n") {
+      this.position++;
+    }
   }
   done(): boolean {
     return this.position >= this.file.chars.length;
@@ -79,7 +82,7 @@ export class Tokenizer {
           if (isKeyLike(char)) {
             return this.consumeKeyLike();
           } else {
-            return new errors.Unexpected(this.cursor.span(), char);
+            throw new errors.Unexpected(this.cursor.span(), char);
           }
       }
     } finally {
@@ -112,17 +115,77 @@ export class Tokenizer {
 
   private consumeLiteralString(): tokens.String {
     const start = this.cursor.clone();
-    return this.consumeString("'", start, (ch) => {
-      if (isControlChar(ch)) {
-        throw new errors.InvalidCharInString(this.cursor.span(start), ch);
-      }
-      return ch;
-    });
+    return this.consumeString("'", start, this.consumeLiteralChar);
   }
+
+  private consumeLiteralChar: ReadCharFn = (ch, start) => {
+    if (isControlChar(ch)) {
+      throw new errors.InvalidCharInString(this.cursor.span(start), ch);
+    }
+    return ch;
+  };
 
   private consumeBasicString(): tokens.String {
     const start = this.cursor.clone();
-    return new tokens.String(start.span(), " ", " ", false);
+    return this.consumeString('"', start, this.consumeBasicChar);
+  }
+
+  private consumeBasicChar: ReadCharFn = (ch, start, multiline) => {
+    if (ch === "\\") {
+      this.cursor.forward();
+      switch (this.cursor.peek()) {
+        case '"':
+          return '"';
+        case "\\":
+          return "\\";
+        case "b":
+          return "\u{8}";
+        case "f":
+          return "\u{c}";
+        case "n":
+          return "\n";
+        case "r":
+          return "\r";
+        case "t":
+          return "\t";
+        case "u":
+          return String.fromCodePoint(this.consumeHex(4));
+        case "U":
+          const hexStr = this.consumeHex(8);
+          try {
+            return String.fromCodePoint(hexStr);
+          } catch {
+            throw new errors.InvalidEscapeValue(
+              this.cursor.span(start),
+              hexStr
+            );
+          }
+        case "\n":
+          if (!multiline) {
+            throw new errors.InvalidEscape(this.cursor.span(start), ch);
+          }
+          if (this.skipWhitespace() === undefined) {
+            throw new errors.InvalidEscape(this.cursor.span(start), ch);
+          }
+          return "";
+        case undefined:
+          throw new errors.UnterminatedString(this.cursor.span(start));
+      }
+      throw new errors.InvalidEscape(this.cursor.span(start), ch);
+    }
+    if (isControlChar(ch)) {
+      throw new errors.InvalidCharInString(this.cursor.span(start), ch);
+    }
+    return ch;
+  };
+
+  private skipWhitespace() {
+    let nextChar = this.cursor.peek(1);
+    while (nextChar && /[\n\t ]/.test(nextChar)) {
+      this.cursor.forward();
+      nextChar = this.cursor.peek(1);
+    }
+    return nextChar;
   }
 
   private consumeKeyLike(): tokens.KeyLike {
@@ -166,14 +229,9 @@ export class Tokenizer {
         case "\r":
           if (!multiline) {
             throw new errors.NewlineInString(this.cursor.span(start));
-          }
-          // Skip the "\r" of "\r\n".
-          this.cursor.forward();
-          if (this.cursor.peek() !== "\n") {
-            // But error if is a freestanding "\r".
+          } else {
             throw new errors.InvalidCharInString(this.cursor.span(start), "\r");
           }
-          break;
         case "\n":
           if (!multiline) {
             throw new errors.NewlineInString(this.cursor.span(start));
@@ -214,7 +272,7 @@ export class Tokenizer {
           }
           break;
         default:
-          value += readChar(char, multiline);
+          value += readChar(char, start, multiline);
           this.cursor.forward();
           break;
       }
@@ -230,6 +288,24 @@ export class Tokenizer {
       return false;
     }
   }
+
+  private consumeHex(expectedLength: number): number {
+    const start = this.cursor.clone();
+    let digits = "";
+    while (expectedLength > 0) {
+      this.cursor.forward();
+      const ch = this.cursor.peek();
+      if (ch === undefined) {
+        throw new errors.UnterminatedString(this.cursor.span(start));
+      } else if (!/[0-9A-Za-z]/.test(ch)) {
+        throw new errors.InvalidHexEscape(this.cursor.span(start), ch);
+      } else {
+        digits += ch;
+      }
+      expectedLength -= 1;
+    }
+    return parseInt(digits, 16);
+  }
 }
 
 function isKeyLike(ch: Char): boolean {
@@ -240,4 +316,8 @@ function isControlChar(ch: Char): boolean {
   return /[\x00-\x08\x0A-\x1F\x7F]/.test(ch);
 }
 
-type ReadCharFn = (initialChar: Char, multiline: boolean) => Char;
+type ReadCharFn = (
+  initialChar: Char,
+  start: Cursor,
+  multiline: boolean
+) => Char;
