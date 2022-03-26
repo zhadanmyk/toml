@@ -17,6 +17,10 @@ export class Span {
     );
   }
 
+  text(): string {
+    return this.file.chars.slice(this.start, this.end + 1).join("");
+  }
+
   toString(): string {
     const start = Math.max(this.start - 3, 0);
     const end = Math.min(this.end + 3, this.file.chars.length - 1);

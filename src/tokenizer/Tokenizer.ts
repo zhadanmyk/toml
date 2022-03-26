@@ -28,11 +28,6 @@ export class Cursor {
   span(start?: Cursor): Span {
     return new Span(this.file, (start ?? this).position, this.position);
   }
-  text(start?: Cursor): string {
-    return this.file.chars
-      .slice((start ?? this).position, this.position + 1)
-      .join("");
-  }
 }
 
 export class Tokenizer {
@@ -40,6 +35,16 @@ export class Tokenizer {
   constructor(private readonly file: File) {
     // Skip any UTF8 BOM char
     this.tryChar("\uFEFF");
+  }
+
+  [Symbol.iterator]() {
+    const tokenizer = this;
+    return {
+      next(): { value: tokens.Token | errors.TokenizerError; done: boolean } {
+        const token = tokenizer.next();
+        return { value: token, done: token instanceof tokens.EndOfFile };
+      },
+    };
   }
 
   next(): tokens.Token | errors.TokenizerError {
@@ -95,10 +100,8 @@ export class Tokenizer {
     while (this.cursor.peek() === " " || this.cursor.peek() === "\t") {
       this.cursor.forward();
     }
-    return new tokens.Whitespace(
-      this.cursor.span(start),
-      this.cursor.text(start)
-    );
+    const span = this.cursor.span(start);
+    return new tokens.Whitespace(span.text(), span);
   }
 
   private consumeComment(): tokens.Comment {
@@ -110,7 +113,8 @@ export class Tokenizer {
       }
       this.cursor.forward();
     }
-    return new tokens.Comment(this.cursor.span(start), this.cursor.text(start));
+    const span = this.cursor.span(start);
+    return new tokens.Comment(span.text(), span);
   }
 
   private consumeLiteralString(): tokens.String {
@@ -197,7 +201,8 @@ export class Tokenizer {
       }
       this.cursor.forward();
     }
-    return new tokens.KeyLike(this.cursor.span(start), this.cursor.text(start));
+    const span = this.cursor.span(start);
+    return new tokens.KeyLike(span.text(), span);
   }
 
   private consumeString(
@@ -214,12 +219,8 @@ export class Tokenizer {
         multiline = true;
       } else {
         // Empty string
-        return new tokens.String(
-          this.cursor.span(start),
-          this.cursor.text(start),
-          value,
-          multiline
-        );
+        const span = this.cursor.span(start);
+        return new tokens.String(value, span.text(), multiline, span);
       }
     }
 
@@ -245,23 +246,16 @@ export class Tokenizer {
         case delimiter:
           if (!multiline) {
             // We found the end of a non-multiline string.
-            return new tokens.String(
-              this.cursor.span(start),
-              this.cursor.text(start),
-              value,
-              multiline
-            );
+            this.cursor.forward();
+            const span = this.cursor.span(start);
+            return new tokens.String(value, span.text(), multiline, span);
           }
           this.cursor.forward();
           if (this.tryChar(delimiter)) {
             if (this.tryChar(delimiter)) {
               // We found the end of a multiline string.
-              return new tokens.String(
-                this.cursor.span(start),
-                this.cursor.text(start),
-                value,
-                multiline
-              );
+              const span = this.cursor.span(start);
+              return new tokens.String(value, span.text(), multiline, span);
             } else {
               // Just two quotes in a row so add them to the value.
               value += delimiter + delimiter;
