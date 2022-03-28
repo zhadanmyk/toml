@@ -99,19 +99,28 @@ describe("Tokenizer", () => {
     });
   });
 
-  // describe("single tokens", () => {
-  //   it("should tokenize each of the single tokens", () => {
-  //     const tokens = Array.from(new Tokenizer(new File(" a ")));
+  describe("single tokens", () => {
+    it("should tokenize each of the single tokens", () => {
+      const [whitespace1, keylike, whitespace2] = Array.from(
+        new Tokenizer(new File(" a "))
+      );
 
-  //     expect(tokens[0]).toBeInstanceOf(Tokens.Whitespace);
-  //     expect(tokens[0]?.span).toEqual({ start: 0, end: 1 });
-  //     expect((tokens[0] as Tokens.Whitespace)?.text).toEqual(" ");
-  //     //   ([
-  //     //     expect.objectContaining({(0, 1), Token::Whitespace(" "), " "),
-  //     //         ((1, 2), Token::Keylike("a"), "a"),
-  //     //         ((2, 3), Token::Whitespace(" "), " "),
-  //     //     ],
-  //     // );
+      expect(whitespace1).toBeInstanceOf(Tokens.Whitespace);
+      expect(whitespace1?.span?.start).toEqual(0);
+      expect(whitespace1?.span?.end).toEqual(1);
+      expect((whitespace1 as Tokens.Whitespace).text).toEqual(" ");
+
+      expect(keylike).toBeInstanceOf(Tokens.KeyLike);
+      expect(keylike?.span?.start).toEqual(1);
+      expect(keylike?.span?.end).toEqual(2);
+      expect((keylike as Tokens.KeyLike).text).toEqual("a");
+
+      expect(whitespace2).toBeInstanceOf(Tokens.Whitespace);
+      expect(whitespace2?.span?.start).toEqual(2);
+      expect(whitespace2?.span?.end).toEqual(3);
+      expect((whitespace2 as Tokens.Whitespace).text).toEqual(" ");
+    });
+  });
 
   //     // t(
   //     //     " a\t [[]] \t [] {} , . =\n# foo \r\n#foo \n ",

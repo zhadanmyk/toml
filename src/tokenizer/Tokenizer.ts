@@ -51,47 +51,43 @@ export class Tokenizer {
     if (this.cursor.done()) {
       return new tokens.EndOfFile(this.cursor.span());
     }
-    try {
-      const char = this.cursor.peek()!;
-      switch (char) {
-        case "\n":
-          return new tokens.Newline(this.cursor.span());
-        case " ":
-        case "\t":
-          return this.consumeWhitespace();
-        case "#":
-          return this.consumeComment();
-        case "=":
-          return new tokens.Equals(this.cursor.span());
-        case ".":
-          return new tokens.Period(this.cursor.span());
-        case ",":
-          return new tokens.Comma(this.cursor.span());
-        case ":":
-          return new tokens.Colon(this.cursor.span());
-        case "+":
-          return new tokens.Plus(this.cursor.span());
-        case "{":
-          return new tokens.LeftBrace(this.cursor.span());
-        case "}":
-          return new tokens.RightBrace(this.cursor.span());
-        case "[":
-          return new tokens.LeftBracket(this.cursor.span());
-        case "]":
-          return new tokens.RightBracket(this.cursor.span());
-        case "'":
-          return this.consumeLiteralString();
-        case '"':
-          return this.consumeBasicString();
-        default:
-          if (isKeyLike(char)) {
-            return this.consumeKeyLike();
-          } else {
-            throw new errors.Unexpected(this.cursor.span(), char);
-          }
-      }
-    } finally {
-      this.cursor.forward();
+    const char = this.cursor.peek()!;
+    switch (char) {
+      case "\n":
+        return new tokens.Newline(this.cursor.span());
+      case " ":
+      case "\t":
+        return this.consumeWhitespace();
+      case "#":
+        return this.consumeComment();
+      case "=":
+        return new tokens.Equals(this.cursor.span());
+      case ".":
+        return new tokens.Period(this.cursor.span());
+      case ",":
+        return new tokens.Comma(this.cursor.span());
+      case ":":
+        return new tokens.Colon(this.cursor.span());
+      case "+":
+        return new tokens.Plus(this.cursor.span());
+      case "{":
+        return new tokens.LeftBrace(this.cursor.span());
+      case "}":
+        return new tokens.RightBrace(this.cursor.span());
+      case "[":
+        return new tokens.LeftBracket(this.cursor.span());
+      case "]":
+        return new tokens.RightBracket(this.cursor.span());
+      case "'":
+        return this.consumeLiteralString();
+      case '"':
+        return this.consumeBasicString();
+      default:
+        if (isKeyLike(char)) {
+          return this.consumeKeyLike();
+        } else {
+          throw new errors.Unexpected(this.cursor.span(), char);
+        }
     }
   }
 

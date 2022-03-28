@@ -5,7 +5,7 @@ export class Span {
   constructor(
     readonly file: File,
     readonly start: number,
-    readonly end: number = start
+    readonly end: number = start + 1
   ) {}
 
   combine(other: Span): Span {
@@ -18,7 +18,7 @@ export class Span {
   }
 
   text(): string {
-    return this.file.chars.slice(this.start, this.end + 1).join("");
+    return this.file.chars.slice(this.start, this.end).join("");
   }
 
   toString(): string {
