@@ -22,6 +22,8 @@ export abstract class Token {
   constructor(readonly kind: TokenKind, readonly span: Span | undefined) {}
 }
 
+export type TokenConstructor = new (span?: Span) => Token;
+
 export class EndOfFile extends Token {
   constructor(span?: Span) {
     super(TokenKind.EndOfFile, span);
@@ -35,7 +37,7 @@ export class Whitespace extends Token {
 }
 
 export class Newline extends Token {
-  constructor(span?: Span) {
+  constructor(readonly text: string, span?: Span) {
     super(TokenKind.Newline, span);
   }
 }

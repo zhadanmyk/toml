@@ -18,15 +18,16 @@ export class Cursor {
   }
   forward(): void {
     this.position++;
-    if (this.peek() === "\r" && this.peek(1) === "\n") {
-      this.position++;
-    }
   }
   done(): boolean {
     return this.position >= this.file.chars.length;
   }
   span(start?: Cursor): Span {
-    return new Span(this.file, (start ?? this).position, this.position);
+    return new Span(
+      this.file,
+      (start ?? this).position,
+      start ? this.position : this.position + 1
+    );
   }
 }
 
@@ -53,31 +54,40 @@ export class Tokenizer {
     }
     const char = this.cursor.peek()!;
     switch (char) {
+      case "\r":
+        if (this.cursor.peek(1) === "\n") {
+          const newlineStart = this.cursor.clone();
+          // Skip the "\r" to get to the "\n".
+          this.cursor.forward();
+          return this.consumeNewline(newlineStart);
+        } else {
+          return this.consumeWhitespace();
+        }
       case "\n":
-        return new tokens.Newline(this.cursor.span());
+        return this.consumeNewline();
       case " ":
       case "\t":
         return this.consumeWhitespace();
       case "#":
         return this.consumeComment();
       case "=":
-        return new tokens.Equals(this.cursor.span());
+        return this.consumeToken(tokens.Equals);
       case ".":
-        return new tokens.Period(this.cursor.span());
+        return this.consumeToken(tokens.Period);
       case ",":
-        return new tokens.Comma(this.cursor.span());
+        return this.consumeToken(tokens.Comma);
       case ":":
-        return new tokens.Colon(this.cursor.span());
+        return this.consumeToken(tokens.Colon);
       case "+":
-        return new tokens.Plus(this.cursor.span());
+        return this.consumeToken(tokens.Plus);
       case "{":
-        return new tokens.LeftBrace(this.cursor.span());
+        return this.consumeToken(tokens.LeftBrace);
       case "}":
-        return new tokens.RightBrace(this.cursor.span());
+        return this.consumeToken(tokens.RightBrace);
       case "[":
-        return new tokens.LeftBracket(this.cursor.span());
+        return this.consumeToken(tokens.LeftBracket);
       case "]":
-        return new tokens.RightBracket(this.cursor.span());
+        return this.consumeToken(tokens.RightBracket);
       case "'":
         return this.consumeLiteralString();
       case '"':
@@ -111,6 +121,21 @@ export class Tokenizer {
     }
     const span = this.cursor.span(start);
     return new tokens.Comment(span.text(), span);
+  }
+
+  private consumeToken(
+    TokenType: tokens.TokenConstructor,
+    start = this.cursor.clone()
+  ) {
+    this.cursor.forward();
+    const span = this.cursor.span(start);
+    return new TokenType(span);
+  }
+
+  private consumeNewline(start = this.cursor.clone()): tokens.Newline {
+    this.cursor.forward();
+    const newlineSpan = this.cursor.span(start);
+    return new tokens.Newline(newlineSpan.text(), newlineSpan);
   }
 
   private consumeLiteralString(): tokens.String {
@@ -160,6 +185,7 @@ export class Tokenizer {
               hexStr
             );
           }
+        case "\r":
         case "\n":
           if (!multiline) {
             throw new errors.InvalidEscape(this.cursor.span(start), ch);
@@ -224,11 +250,6 @@ export class Tokenizer {
       const char = this.cursor.peek()!;
       switch (char) {
         case "\r":
-          if (!multiline) {
-            throw new errors.NewlineInString(this.cursor.span(start));
-          } else {
-            throw new errors.InvalidCharInString(this.cursor.span(start), "\r");
-          }
         case "\n":
           if (!multiline) {
             throw new errors.NewlineInString(this.cursor.span(start));

@@ -13,7 +13,7 @@ describe("Tokenizer", () => {
     testString("'\"a'", '"a', false);
     testString("''''a'''", "'a", true);
     testString("'''\n'a\n'''", "'a\n", true);
-    testString("'''a\n'a\r\n'''", "a\n'a\n", true);
+    testString("'''a\n'a\r\n'''", "a\n'a\r\n", true);
   });
 
   describe("basic strings", () => {
@@ -52,7 +52,7 @@ describe("Tokenizer", () => {
       );
       expect(() => new Tokenizer(new File('"\\\r\n')).next())
         .toThrowErrorMatchingInlineSnapshot(`
-"InvalidEscape (<unnamed file> [0,3]:\\"\\\\
+"InvalidEscape (<unnamed file> [0,2]:\\"\\\\
 ): Unexpected character: \\"\\\\\\\\\\""
         `); // (2, '\n'));
       expect(() =>
@@ -105,53 +105,43 @@ describe("Tokenizer", () => {
         new Tokenizer(new File(" a "))
       );
 
-      expect(whitespace1).toBeInstanceOf(Tokens.Whitespace);
-      expect(whitespace1?.span?.start).toEqual(0);
-      expect(whitespace1?.span?.end).toEqual(1);
-      expect((whitespace1 as Tokens.Whitespace).text).toEqual(" ");
-
-      expect(keylike).toBeInstanceOf(Tokens.KeyLike);
-      expect(keylike?.span?.start).toEqual(1);
-      expect(keylike?.span?.end).toEqual(2);
-      expect((keylike as Tokens.KeyLike).text).toEqual("a");
-
-      expect(whitespace2).toBeInstanceOf(Tokens.Whitespace);
-      expect(whitespace2?.span?.start).toEqual(2);
-      expect(whitespace2?.span?.end).toEqual(3);
-      expect((whitespace2 as Tokens.Whitespace).text).toEqual(" ");
+      testToken(whitespace1, Tokens.Whitespace, 0, 1, " ");
+      testToken(keylike, Tokens.KeyLike, 1, 2, "a");
+      testToken(whitespace2, Tokens.Whitespace, 2, 3, " ");
     });
   });
 
-  //     // t(
-  //     //     " a\t [[]] \t [] {} , . =\n# foo \r\n#foo \n ",
-  //     //     &[
-  //     //         ((0, 1), Token::Whitespace(" "), " "),
-  //     //         ((1, 2), Token::Keylike("a"), "a"),
-  //     //         ((2, 4), Token::Whitespace("\t "), "\t "),
-  //     //         ((4, 5), Token::LeftBracket, "["),
-  //     //         ((5, 6), Token::LeftBracket, "["),
-  //     //         ((6, 7), Token::RightBracket, "]"),
-  //     //         ((7, 8), Token::RightBracket, "]"),
-  //     //         ((8, 11), Token::Whitespace(" \t "), " \t "),
-  //     //         ((11, 12), Token::LeftBracket, "["),
-  //     //         ((12, 13), Token::RightBracket, "]"),
-  //     //         ((13, 14), Token::Whitespace(" "), " "),
-  //     //         ((14, 15), Token::LeftBrace, "{"),
-  //     //         ((15, 16), Token::RightBrace, "}"),
-  //     //         ((16, 17), Token::Whitespace(" "), " "),
-  //     //         ((17, 18), Token::Comma, ","),
-  //     //         ((18, 19), Token::Whitespace(" "), " "),
-  //     //         ((19, 20), Token::Period, "."),
-  //     //         ((20, 21), Token::Whitespace(" "), " "),
-  //     //         ((21, 22), Token::Equals, "="),
-  //     //         ((22, 23), Token::Newline, "\n"),
-  //     //         ((23, 29), Token::Comment("# foo "), "# foo "),
-  //     //         ((29, 31), Token::Newline, "\r\n"),
-  //     //         ((31, 36), Token::Comment("#foo "), "#foo "),
-  //     //         ((36, 37), Token::Newline, "\n"),
-  //     //         ((37, 38), Token::Whitespace(" "), " "),
-  //   });
-  // });
+  it("should tokenize a complex string of tokens", () => {
+    const tokens = Array.from(
+      new Tokenizer(new File(" a\t [[]] \t [] {} , . =\n# foo \r\n#foo \n "))
+    );
+
+    testToken(tokens[0], Tokens.Whitespace, 0, 1, " ");
+    testToken(tokens[1], Tokens.KeyLike, 1, 2, "a");
+    testToken(tokens[2], Tokens.Whitespace, 2, 4, "\t ");
+    testToken(tokens[3], Tokens.LeftBracket, 4, 5);
+    testToken(tokens[4], Tokens.LeftBracket, 5, 6);
+    testToken(tokens[5], Tokens.RightBracket, 6, 7);
+    testToken(tokens[6], Tokens.RightBracket, 7, 8);
+    testToken(tokens[7], Tokens.Whitespace, 8, 11, " \t ");
+    testToken(tokens[8], Tokens.LeftBracket, 11, 12);
+    testToken(tokens[9], Tokens.RightBracket, 12, 13);
+    testToken(tokens[10], Tokens.Whitespace, 13, 14, " ");
+    testToken(tokens[11], Tokens.LeftBrace, 14, 15);
+    testToken(tokens[12], Tokens.RightBrace, 15, 16);
+    testToken(tokens[13], Tokens.Whitespace, 16, 17, " ");
+    testToken(tokens[14], Tokens.Comma, 17, 18);
+    testToken(tokens[15], Tokens.Whitespace, 18, 19, " ");
+    testToken(tokens[16], Tokens.Period, 19, 20);
+    testToken(tokens[17], Tokens.Whitespace, 20, 21, " ");
+    testToken(tokens[18], Tokens.Equals, 21, 22);
+    testToken(tokens[19], Tokens.Newline, 22, 23, "\n");
+    testToken(tokens[20], Tokens.Comment, 23, 29, "# foo ");
+    testToken(tokens[21], Tokens.Newline, 29, 31, "\r\n");
+    testToken(tokens[22], Tokens.Comment, 31, 36, "#foo ");
+    testToken(tokens[23], Tokens.Newline, 36, 37);
+    testToken(tokens[24], Tokens.Whitespace, 37, 38, " ");
+  });
 });
 
 function testString(input: string, value = "", multiline = false) {
@@ -170,8 +160,23 @@ function test<T extends Tokens.Token>(
 ) {
   const tokenizer = new Tokenizer(new File(input));
   const token = tokenizer.next() as Tokens.Token;
-  expect(token).toBeInstanceOf(tokenType);
-  expect(token.span?.start).toEqual(start);
-  expect(token.span?.end).toEqual(end);
+  testToken(token, tokenType, start, end);
   return token as T;
+}
+
+function testToken(
+  token: Tokens.Token | errors.TokenizerError | undefined,
+  TokenType: unknown,
+  start: number,
+  end: number,
+  text?: string
+): void {
+  expect(token).toBeInstanceOf(TokenType);
+  if (token instanceof (TokenType as Function)) {
+    expect(token?.span?.start).toEqual(start);
+    expect(token?.span?.end).toEqual(end);
+    if (text !== undefined) {
+      expect((token as unknown as { text: string }).text).toEqual(text);
+    }
+  }
 }
